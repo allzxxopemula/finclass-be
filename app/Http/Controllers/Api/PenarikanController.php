@@ -51,10 +51,24 @@ class PenarikanController extends Controller
             'tahun' => 'required|integer|min:2000|max:2100',
             'user_id' => 'required|exists:users,id',
         ]);
+        
         abort_unless(User::whereKey($data['user_id'])->where('kelas_id', $data['kelas_id'])->where('role', 'bendahara')->exists(), 403, 'Hanya bendahara kelas yang dapat membuat buku kas.');
+        
         $kelas = Kelas::findOrFail($data['kelas_id']);
         $dates = $this->datesForMonth($kelas->hari_penarikan, $data['bulan'], $data['tahun']);
         $students = Siswa::where('kelas_id', $kelas->id)->get();
+
+        $monthStart = Carbon::create($data['tahun'], $data['bulan'], 1)->startOfMonth();
+        $monthEnd = $monthStart->copy()->endOfMonth();
+
+        // Hapus sesi penarikan kosong (belum ada yang bayar) yang tanggalnya tidak sesuai dengan hari penarikan baru
+        $validDateStrings = collect($dates)->map(fn($d) => $d->toDateString())->toArray();
+        
+        PenarikanKas::where('kelas_id', $kelas->id)
+            ->whereBetween('tanggal_penarikan', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->whereNotIn('tanggal_penarikan', $validDateStrings)
+            ->where('total_nominal', 0)
+            ->delete();
 
         $alreadyExists = PenarikanKas::where('kelas_id', $kelas->id)
             ->whereBetween('tanggal_penarikan', [$dates[0]->toDateString(), end($dates)->toDateString()])
@@ -64,7 +78,7 @@ class PenarikanController extends Controller
             foreach ($dates as $date) {
                 $session = PenarikanKas::firstOrCreate(
                     ['kelas_id' => $kelas->id, 'tanggal_penarikan' => $date->toDateString()],
-                    ['minggu_ke' => 0, 'dikonfirmasi_pada' => $date->endOfDay(), 'total_nominal' => 0]
+                    ['minggu_ke' => 0, 'dikonfirmasi_pada' => $date->copy()->endOfDay(), 'total_nominal' => 0]
                 );
                 foreach ($students as $student) {
                     PenarikanKasDetail::firstOrCreate(
@@ -74,12 +88,13 @@ class PenarikanController extends Controller
                 }
             }
         });
+        
         AuditLog::record($data['user_id'], 'Membuat atau membuka Buku Kas '.$data['tahun'].'-'.$data['bulan']);
 
         return response()->json([
             'status' => 'success',
             'already_exists' => $alreadyExists,
-            'message' => $alreadyExists ? 'Buku kas bulan tersebut sudah tersedia.' : 'Buku kas berhasil dibuat.',
+            'message' => $alreadyExists ? 'Buku kas bulan tersebut sudah disesuaikan dengan hari penarikan aktif.' : 'Buku kas berhasil dibuat.',
         ]);
     }
 
@@ -90,16 +105,19 @@ class PenarikanController extends Controller
             'kelas_id' => 'required|exists:kelas,id',
             'user_id' => 'required|exists:users,id',
         ]);
+        
         abort_unless(User::whereKey($data['user_id'])->where('kelas_id', $data['kelas_id'])->where('role', 'bendahara')->exists(), 403, 'Hanya bendahara kelas yang dapat menghapus buku kas.');
 
         $kelas = Kelas::findOrFail($data['kelas_id']);
-        $dates = $this->datesForMonth($kelas->hari_penarikan, $bulan, $tahun);
-        DB::transaction(function () use ($data, $dates) {
-            if (!$dates) return;
+        $monthStart = Carbon::create($tahun, $bulan, 1)->startOfMonth();
+        $monthEnd = $monthStart->copy()->endOfMonth();
+
+        DB::transaction(function () use ($data, $monthStart, $monthEnd) {
             PenarikanKas::where('kelas_id', $data['kelas_id'])
-                ->whereBetween('tanggal_penarikan', [$dates[0]->toDateString(), end($dates)->toDateString()])
+                ->whereBetween('tanggal_penarikan', [$monthStart->toDateString(), $monthEnd->toDateString()])
                 ->delete();
         });
+        
         AuditLog::record($data['user_id'], 'Menghapus Buku Kas '.$tahun.'-'.$bulan);
 
         return response()->json(['status' => 'success', 'message' => 'Buku kas berhasil dihapus.']);
@@ -119,19 +137,32 @@ class PenarikanController extends Controller
         $dates = $this->datesForMonth($kelas->hari_penarikan, $data['bulan'], $data['tahun']);
         $monthStart = Carbon::create($data['tahun'], $data['bulan'], 1)->startOfMonth();
         $monthEnd = $monthStart->copy()->endOfMonth();
+
+        $validDateStrings = collect($dates)->map(fn($d) => $d->toDateString())->toArray();
+
+        // Bersihkan sesi penarikan lama di bulan ini yang kosong jika hari penarikan kelas diubah
+        PenarikanKas::where('kelas_id', $kelas->id)
+            ->whereBetween('tanggal_penarikan', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->whereNotIn('tanggal_penarikan', $validDateStrings)
+            ->where('total_nominal', 0)
+            ->delete();
+
         $sessions = PenarikanKas::where('kelas_id', $kelas->id)
             ->with('details')->get()
             ->filter(function ($session) use ($monthStart, $monthEnd) {
                 $date = $session->tanggal_penarikan ?? $session->dikonfirmasi_pada;
                 return $date && $date->betweenIncluded($monthStart, $monthEnd);
-            })->sortBy('dikonfirmasi_pada')->values();
+            })->sortBy('tanggal_penarikan')->values();
+
+        // Tanggal kolom mengutamakan jadwal hari penarikan aktif + sesi yang memang ada transaksi bayar
         $dateValues = collect($dates)->map(fn ($date) => $date->toDateString())
-            ->merge($sessions->map(fn ($session) => $session->tanggal_penarikan?->format('Y-m-d') ?? $session->dikonfirmasi_pada?->format('Y-m-d')))
+            ->merge($sessions->where('total_nominal', '>', 0)->map(fn ($session) => $session->tanggal_penarikan?->format('Y-m-d')))
             ->filter()->unique()->sort()->values();
+
         $activeDate = $dateValues->contains($data['tanggal'] ?? null)
             ? $data['tanggal']
             : ($dateValues->first() ?? null);
-        // Pertahankan urutan anggota sesuai urutan saat ditambahkan di Kelola Anggota.
+
         $siswa = Siswa::where('kelas_id', $kelas->id)->orderBy('id')->get();
 
         $previousDetails = PenarikanKasDetail::whereHas('penarikanKas', function ($query) use ($kelas) {
@@ -160,7 +191,6 @@ class PenarikanController extends Controller
         return response()->json([
             'status' => 'success',
             'kelas' => $kelas,
-            // Buku kas menampilkan maksimal 15 kolom tanggal.
             'tanggal_kolom' => $dateValues->take(15)->values(),
             'tanggal_aktif' => $activeDate,
             'siswas' => $students,
@@ -184,22 +214,18 @@ class PenarikanController extends Controller
 
         $kelas = Kelas::findOrFail($validated['kelas_id']);
         $tanggal = Carbon::parse($validated['tanggal_penarikan']);
-        $allowedDates = collect($this->datesForMonth($kelas->hari_penarikan, $tanggal->month, $tanggal->year))
-            ->contains(fn ($date) => $date->toDateString() === $tanggal->toDateString());
-        if (!$allowedDates) {
-            return response()->json(['status' => 'error', 'message' => "Tanggal harus jatuh pada hari penarikan kelas ({$kelas->hari_penarikan})."], 422);
-        }
-
+        
         $session = DB::transaction(function () use ($validated, $kelas) {
             $tanggal = Carbon::parse($validated['tanggal_penarikan'])->startOfDay();
             $lastWeek = PenarikanKas::where('kelas_id', $validated['kelas_id'])
                 ->lockForUpdate()
                 ->max('minggu_ke');
+                
             $session = PenarikanKas::updateOrCreate(
                 ['kelas_id' => $validated['kelas_id'], 'tanggal_penarikan' => $tanggal->toDateString()],
                 [
                     'minggu_ke' => ((int) $lastWeek) + 1,
-                    'dikonfirmasi_pada' => $tanggal->endOfDay(),
+                    'dikonfirmasi_pada' => $tanggal->copy()->endOfDay(),
                 ]
             );
 
@@ -238,6 +264,7 @@ class PenarikanController extends Controller
             'user_id' => 'required|exists:users,id',
             'sudah_bayar' => 'required|boolean',
         ]);
+        
         abort_unless(User::whereKey($data['user_id'])->where('kelas_id', $data['kelas_id'])->where('role', 'bendahara')->exists(), 403, 'Hanya bendahara kelas yang dapat mengubah buku kas.');
 
         $result = DB::transaction(function () use ($data, $tanggal, $siswaId) {
@@ -248,7 +275,6 @@ class PenarikanController extends Controller
                 ->lockForUpdate()
                 ->first();
 
-            // Kolom tanggal bisa berasal dari jadwal bulan, jadi detail dibuat saat pertama kali diklik.
             if (!$session) {
                 $session = PenarikanKas::create([
                     'kelas_id' => $kelas->id,
@@ -263,12 +289,14 @@ class PenarikanController extends Controller
                 ['penarikan_kas_id' => $session->id, 'siswa_id' => $siswa->id],
                 ['nominal' => 0, 'sudah_bayar' => false]
             );
+            
             $paid = (bool) $data['sudah_bayar'];
             $detail->update([
                 'sudah_bayar' => $paid,
                 'nominal' => $paid ? $kelas->nominal_mingguan : 0,
                 'dibayar_pada' => $paid ? now() : null,
             ]);
+            
             $session->update(['total_nominal' => $session->details()->where('sudah_bayar', true)->sum('nominal')]);
             AuditLog::record($data['user_id'], ($paid ? 'Mencentang' : 'Membatalkan centang').' pembayaran siswa pada '.$tanggal);
 
@@ -285,12 +313,17 @@ class PenarikanController extends Controller
             'Rabu' => Carbon::WEDNESDAY, 'Kamis' => Carbon::THURSDAY, 'Jumat' => Carbon::FRIDAY,
             'Sabtu' => Carbon::SATURDAY,
         ];
+        
         $date = Carbon::create($year, $month, 1)->startOfDay();
         $dates = [];
+        
         while ($date->month === $month) {
-            if ($date->dayOfWeek === ($days[$dayName] ?? Carbon::WEDNESDAY)) $dates[] = $date->copy();
+            if ($date->dayOfWeek === ($days[$dayName] ?? Carbon::WEDNESDAY)) {
+                $dates[] = $date->copy();
+            }
             $date->addDay();
         }
+        
         return $dates;
     }
 }
