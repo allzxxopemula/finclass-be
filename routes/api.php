@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\KelasController;
 use App\Http\Controllers\Api\PenarikanController;
 use App\Http\Controllers\Api\SiswaController;
 use App\Http\Controllers\Api\AuditController;
+use App\Http\Controllers\Api\ChatController;
 
 // Endpoint autentikasi berdiri sendiri agar tidak bercampur dengan transaksi kas.
 Route::post('/login', [AuthController::class, 'login']);
@@ -40,6 +41,10 @@ Route::patch('/penarikan/{tanggal}/siswa/{siswaId}', [PenarikanController::class
 Route::get('/riwayat', [KasController::class, 'getRiwayat']);
 Route::get('/aktivitas', [AuditController::class, 'index']);
 Route::post('/tambah-pengeluaran', [KasController::class, 'tambahPengeluaran']);
+
+// Room chat kelas
+Route::get('/chat-room', [ChatController::class, 'index']);
+Route::post('/chat-room/send', [ChatController::class, 'store']);
 
 // hapus room
 Route::post('/keluar-kelas', [KasController::class, 'keluarKelas']);
