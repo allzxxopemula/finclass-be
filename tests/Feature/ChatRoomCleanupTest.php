@@ -40,4 +40,25 @@ it('deletes expired chat messages older than seven days', function () {
 
     expect(ChatMessage::count())->toBe(1);
     expect(ChatMessage::first()->message)->toBe('pesan baru');
+    expect(ChatRoom::whereKey($room->id)->exists())->toBeTrue();
+});
+
+it('keeps the chat room available even when there are no messages left', function () {
+    $user = User::factory()->create([
+        'name' => 'Budi',
+        'email' => 'budi@example.com',
+        'username' => 'budi',
+        'role' => 'siswa',
+        'kelas_id' => 2,
+    ]);
+
+    $room = ChatRoom::create([
+        'kelas_id' => 2,
+        'name' => 'Room Kelas 2',
+    ]);
+
+    $room->cleanupExpiredMessages();
+
+    expect(ChatRoom::whereKey($room->id)->exists())->toBeTrue();
+    expect(ChatMessage::count())->toBe(0);
 });

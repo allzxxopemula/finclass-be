@@ -23,9 +23,5 @@ class ChatRoom extends Model
         $this->messages()
             ->where('created_at', '<', now()->subDays(7))
             ->delete();
-
-        if ($this->messages()->doesntExist()) {
-            $this->delete();
-        }
     }
 }
