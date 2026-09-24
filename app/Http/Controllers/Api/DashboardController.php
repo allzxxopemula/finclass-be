@@ -41,10 +41,19 @@ class DashboardController extends Controller
         $latestSession = PenarikanKas::where('kelas_id', $kelas->id)->latest('tanggal_penarikan')->withCount(['details as jumlah_sudah_bayar' => fn ($query) => $query->where('sudah_bayar', true)])->first();
         $totalPemasukan = (float) $saldoAwal + (float) $legacyPayments->sum('jumlah_bayar') + (float) $withdrawals->sum('nominal');
         $totalPengeluaran = (float) Pengeluaran::where('kelas_id', $kelas->id)->sum('nominal');
+        $bendahara = User::where('kelas_id', $kelas->id)->where('role', 'bendahara')->first();
 
         return response()->json([
             'status' => 'success',
             'kelas' => $kelas,
+            'bendahara' => $bendahara ? [
+                'id' => $bendahara->id,
+                'name' => $bendahara->name,
+                'email' => $bendahara->email,
+                'role' => $bendahara->role,
+                'kelas_id' => $bendahara->kelas_id,
+                'profile_image_url' => $bendahara->profile_image_url,
+            ] : null,
             'siswas' => $siswas,
             'saldo' => $totalPemasukan - $totalPengeluaran,
             'total_pemasukan' => $totalPemasukan,
