@@ -116,16 +116,28 @@ class KasController extends Controller
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'name' => 'required|string|max:255',
+            'profile_image_url' => 'nullable|string|url|max:2048',
         ]);
 
         $user = User::find($request->user_id);
         $user->name = $request->name;
+
+        if ($request->filled('profile_image_url')) {
+            $user->profile_image_url = $request->profile_image_url;
+        }
+
         $user->save();
-        AuditLog::record($request->user_id, 'Mengubah nama profil menjadi '.$user->name);
+
+        $logMessage = 'Mengubah profil ' . $user->name;
+        if ($request->filled('profile_image_url')) {
+            $logMessage .= ' dengan foto profil baru';
+        }
+
+        AuditLog::record($request->user_id, $logMessage);
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Nama profil berhasil diperbarui!',
+            'message' => 'Profil berhasil diperbarui!',
             'user' => $user
         ]);
     }

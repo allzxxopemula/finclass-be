@@ -16,8 +16,9 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'role',      // <-- INI WAJIB ADA BIAR BISA SIMPAN ROLE
-        'kelas_id',  // <-- INI WAJIB ADA BIAR GAK KERESET PAS REFRESH
+        'role',
+        'kelas_id',
+        'profile_image_url',
     ];
 
     protected $hidden = [
