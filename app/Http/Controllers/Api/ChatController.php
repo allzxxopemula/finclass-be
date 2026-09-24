@@ -5,11 +5,19 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ChatRoom;
 use App\Models\ChatMessage;
+use App\Models\Kelas;
 use App\Models\User;
 use Illuminate\Http\Request;
 
 class ChatController extends Controller
 {
+    protected function resolveRoomName(int $kelasId): string
+    {
+        $kelas = Kelas::find($kelasId);
+
+        return $kelas?->nama_kelas ?? ($kelas?->name ?? 'Room Kelas ' . $kelasId);
+    }
+
     public function index(Request $request)
     {
         $request->validate([
@@ -25,11 +33,17 @@ class ChatController extends Controller
             ], 200);
         }
 
+        $roomName = $this->resolveRoomName($user->kelas_id);
         $room = ChatRoom::firstOrCreate([
             'kelas_id' => $user->kelas_id,
         ], [
-            'name' => 'Room Kelas ' . $user->kelas_id,
+            'name' => $roomName,
         ]);
+
+        if ($room->name !== $roomName) {
+            $room->name = $roomName;
+            $room->save();
+        }
 
         $room->cleanupExpiredMessages();
 
@@ -79,11 +93,17 @@ class ChatController extends Controller
             ], 403);
         }
 
+        $roomName = $this->resolveRoomName($user->kelas_id);
         $room = ChatRoom::firstOrCreate([
             'kelas_id' => $user->kelas_id,
         ], [
-            'name' => 'Room Kelas ' . $user->kelas_id,
+            'name' => $roomName,
         ]);
+
+        if ($room->name !== $roomName) {
+            $room->name = $roomName;
+            $room->save();
+        }
 
         $recentMessage = ChatMessage::where('user_id', $user->id)
             ->where('created_at', '>=', now()->subSeconds(5))
