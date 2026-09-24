@@ -11,6 +11,7 @@ use App\Models\Pengeluaran;
 use App\Models\Siswa;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class DashboardController extends Controller
 {
@@ -36,11 +37,25 @@ class DashboardController extends Controller
             ->whereNotNull('siswa_id')->where('minggu_ke', '>', 0)->get();
         $saldoAwal = PembayaranKas::where('kelas_id', $kelas->id)
             ->whereNull('siswa_id')->where('minggu_ke', 0)->sum('jumlah_bayar');
-        $withdrawals = PenarikanKasDetail::whereHas('penarikanKas', fn ($query) => $query->where('kelas_id', $kelas->id))
+        $allTimeWithdrawals = PenarikanKasDetail::whereHas('penarikanKas', fn ($query) => $query->where('kelas_id', $kelas->id))
             ->where('sudah_bayar', true)->get();
         $latestSession = PenarikanKas::where('kelas_id', $kelas->id)->latest('tanggal_penarikan')->withCount(['details as jumlah_sudah_bayar' => fn ($query) => $query->where('sudah_bayar', true)])->first();
-        $totalPemasukan = (float) $saldoAwal + (float) $legacyPayments->sum('jumlah_bayar') + (float) $withdrawals->sum('nominal');
-        $totalPengeluaran = (float) Pengeluaran::where('kelas_id', $kelas->id)->sum('nominal');
+
+        $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
+        $weekEnd = Carbon::now()->endOfWeek(Carbon::SUNDAY);
+
+        $weeklyWithdrawals = PenarikanKasDetail::whereHas('penarikanKas', fn ($query) => $query
+                ->where('kelas_id', $kelas->id)
+                ->whereBetween('tanggal_penarikan', [$weekStart->toDateString(), $weekEnd->toDateString()]))
+            ->where('sudah_bayar', true)
+            ->sum('nominal');
+
+        $totalPemasukan = (float) $saldoAwal + (float) $legacyPayments->sum('jumlah_bayar') + (float) $allTimeWithdrawals->sum('nominal');
+        $totalPengeluaranKeseluruhan = (float) Pengeluaran::where('kelas_id', $kelas->id)->sum('nominal');
+        $totalPengeluaranMingguIni = (float) Pengeluaran::where('kelas_id', $kelas->id)
+            ->whereBetween('created_at', [$weekStart->copy()->startOfDay(), $weekEnd->copy()->endOfDay()])
+            ->sum('nominal');
+
         $bendahara = User::where('kelas_id', $kelas->id)->where('role', 'bendahara')->first();
         $members = User::where('kelas_id', $kelas->id)
             ->orderBy('role', 'desc')
@@ -70,10 +85,11 @@ class DashboardController extends Controller
             ] : null,
             'members' => $members,
             'siswas' => $siswas,
-            'saldo' => $totalPemasukan - $totalPengeluaran,
+            'saldo' => $totalPemasukan - $totalPengeluaranKeseluruhan,
             'total_pemasukan' => $totalPemasukan,
-            'pemasukan_minggu_ini' => (float) $withdrawals->sum('nominal'),
-            'total_pengeluaran' => $totalPengeluaran,
+            'pemasukan_minggu_ini' => (float) $weeklyWithdrawals,
+            'total_pengeluaran' => (float) $totalPengeluaranMingguIni,
+            'total_pengeluaran_keseluruhan' => $totalPengeluaranKeseluruhan,
             'jumlah_siswa' => $siswas->count(),
             'jumlah_siswa_bayar' => (int) ($latestSession?->jumlah_sudah_bayar ?? 0),
         ]);

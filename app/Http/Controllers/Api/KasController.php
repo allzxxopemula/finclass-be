@@ -13,6 +13,7 @@ use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Support\Carbon;
 
 class KasController extends Controller
 {
@@ -98,16 +99,30 @@ class KasController extends Controller
         $totalPemasukanSiswa = $pembayaran->where('minggu_ke', '>=', 0)->sum('jumlah_bayar');
         $totalPemasukan = $totalPemasukanSiswa + $totalSaldoAwal;
 
-        $totalPengeluaran = Pengeluaran::where('kelas_id', $user->kelas_id)->sum('nominal');
-        $saldoUtama = $totalPemasukan - $totalPengeluaran;
+        $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
+        $weekEnd = Carbon::now()->endOfWeek(Carbon::SUNDAY);
+
+        $weeklyWithdrawals = \App\Models\PenarikanKasDetail::whereHas('penarikanKas', fn ($query) => $query
+                ->where('kelas_id', $user->kelas_id)
+                ->whereBetween('tanggal_penarikan', [$weekStart->toDateString(), $weekEnd->toDateString()]))
+            ->where('sudah_bayar', true)
+            ->sum('nominal');
+
+        $totalPengeluaranKeseluruhan = Pengeluaran::where('kelas_id', $user->kelas_id)->sum('nominal');
+        $totalPengeluaranMingguIni = Pengeluaran::where('kelas_id', $user->kelas_id)
+            ->whereBetween('created_at', [$weekStart->copy()->startOfDay(), $weekEnd->copy()->endOfDay()])
+            ->sum('nominal');
+
+        $saldoUtama = $totalPemasukan - $totalPengeluaranKeseluruhan;
 
         return response()->json([
             'status' => 'success',
             'kelas' => $kelas,
             'siswas' => $siswas,
             'saldo' => $saldoUtama,
-            'pemasukan_minggu_ini' => $totalPemasukan,
-            'total_pengeluaran' => $totalPengeluaran
+            'pemasukan_minggu_ini' => (float) $weeklyWithdrawals,
+            'total_pengeluaran' => (float) $totalPengeluaranMingguIni,
+            'total_pengeluaran_keseluruhan' => $totalPengeluaranKeseluruhan,
         ]);
     }
 
