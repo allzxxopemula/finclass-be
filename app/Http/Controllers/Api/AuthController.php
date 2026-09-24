@@ -31,8 +31,13 @@ class AuthController extends Controller
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:6',
             'role' => 'required|in:bendahara,wali_kelas,siswa',
+            'username' => 'nullable|string|max:40',
         ]);
+
+        $generatedUsername = preg_replace('/[^a-z0-9]/i', '', strtolower($data['name'])) ?: 'user';
+        $data['username'] = $data['username'] ?? $generatedUsername;
         $data['password'] = Hash::make($data['password']);
+
         $user = User::create($data);
         AuditLog::record($user->id, 'Membuat akun FinClass');
 

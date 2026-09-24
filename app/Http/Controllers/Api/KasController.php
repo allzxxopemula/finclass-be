@@ -131,11 +131,16 @@ class KasController extends Controller
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'name' => 'required|string|max:255',
+            'username' => 'nullable|string|max:40',
             'profile_image_url' => 'nullable|string|url|max:2048',
         ]);
 
         $user = User::find($request->user_id);
         $user->name = $request->name;
+
+        if ($request->filled('username')) {
+            $user->username = trim($request->username);
+        }
 
         if ($request->filled('profile_image_url')) {
             $user->profile_image_url = $request->profile_image_url;
