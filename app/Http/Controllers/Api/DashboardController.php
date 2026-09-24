@@ -39,10 +39,18 @@ class DashboardController extends Controller
             ->whereNull('siswa_id')->where('minggu_ke', 0)->sum('jumlah_bayar');
         $allTimeWithdrawals = PenarikanKasDetail::whereHas('penarikanKas', fn ($query) => $query->where('kelas_id', $kelas->id))
             ->where('sudah_bayar', true)->get();
-        $latestSession = PenarikanKas::where('kelas_id', $kelas->id)->latest('tanggal_penarikan')->withCount(['details as jumlah_sudah_bayar' => fn ($query) => $query->where('sudah_bayar', true)])->first();
 
         $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
         $weekEnd = Carbon::now()->endOfWeek(Carbon::SUNDAY);
+
+        $weeklySessionIds = PenarikanKas::where('kelas_id', $kelas->id)
+            ->whereBetween('tanggal_penarikan', [$weekStart->toDateString(), $weekEnd->toDateString()])
+            ->pluck('id');
+
+        $weeklyPaidMembers = PenarikanKasDetail::whereIn('penarikan_kas_id', $weeklySessionIds)
+            ->where('sudah_bayar', true)
+            ->distinct('siswa_id')
+            ->count('siswa_id');
 
         $weeklyWithdrawals = PenarikanKasDetail::whereHas('penarikanKas', fn ($query) => $query
                 ->where('kelas_id', $kelas->id)
@@ -91,7 +99,8 @@ class DashboardController extends Controller
             'total_pengeluaran' => (float) $totalPengeluaranMingguIni,
             'total_pengeluaran_keseluruhan' => $totalPengeluaranKeseluruhan,
             'jumlah_siswa' => $siswas->count(),
-            'jumlah_siswa_bayar' => (int) ($latestSession?->jumlah_sudah_bayar ?? 0),
+            'jumlah_siswa_bayar' => (int) $weeklyPaidMembers,
+            'jumlah_siswa_belum_bayar' => max(0, $siswas->count() - $weeklyPaidMembers),
         ]);
     }
 }
