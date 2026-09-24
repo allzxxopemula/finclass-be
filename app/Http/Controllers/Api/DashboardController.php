@@ -42,6 +42,20 @@ class DashboardController extends Controller
         $totalPemasukan = (float) $saldoAwal + (float) $legacyPayments->sum('jumlah_bayar') + (float) $withdrawals->sum('nominal');
         $totalPengeluaran = (float) Pengeluaran::where('kelas_id', $kelas->id)->sum('nominal');
         $bendahara = User::where('kelas_id', $kelas->id)->where('role', 'bendahara')->first();
+        $members = User::where('kelas_id', $kelas->id)
+            ->orderBy('role', 'desc')
+            ->orderBy('id')
+            ->get()
+            ->map(function ($member) {
+                return [
+                    'id' => $member->id,
+                    'name' => $member->name,
+                    'email' => $member->email,
+                    'role' => $member->role,
+                    'kelas_id' => $member->kelas_id,
+                    'profile_image_url' => $member->profile_image_url,
+                ];
+            });
 
         return response()->json([
             'status' => 'success',
@@ -54,6 +68,7 @@ class DashboardController extends Controller
                 'kelas_id' => $bendahara->kelas_id,
                 'profile_image_url' => $bendahara->profile_image_url,
             ] : null,
+            'members' => $members,
             'siswas' => $siswas,
             'saldo' => $totalPemasukan - $totalPengeluaran,
             'total_pemasukan' => $totalPemasukan,
