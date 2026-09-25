@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\ChatController;
 // Endpoint autentikasi berdiri sendiri agar tidak bercampur dengan transaksi kas.
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+Route::delete('/delete-account', [AuthController::class, 'deleteAccount']);
 
 // Ringkasan home mengambil data terhitung dari database.
 Route::get('/dashboard', [DashboardController::class, 'show']);

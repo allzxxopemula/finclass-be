@@ -43,4 +43,29 @@ class AuthController extends Controller
 
         return response()->json(['status' => 'success', 'message' => 'Registrasi berhasil!', 'user' => $user], 201);
     }
+
+    public function deleteAccount(Request $request)
+    {
+        $data = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'confirmation_text' => 'required|string',
+        ]);
+
+        $user = User::findOrFail($data['user_id']);
+        $expectedText = 'Saya ingin menghapus akun ' . ($user->username ?: $user->name) . ' secara permanen';
+
+        if (strtolower(trim($data['confirmation_text'])) !== strtolower(trim($expectedText))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Konfirmasi penghapusan akun tidak sesuai. Ketik ulang kalimat yang benar untuk melanjutkan.',
+            ], 422);
+        }
+
+        $user->delete();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Akun berhasil dihapus permanen.',
+        ]);
+    }
 }
