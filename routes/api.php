@@ -44,7 +44,9 @@ Route::post('/tambah-pengeluaran', [KasController::class, 'tambahPengeluaran']);
 
 // Room chat kelas
 Route::get('/chat-room', [ChatController::class, 'index']);
+Route::post('/chat-room/read', [ChatController::class, 'markAsRead']);
 Route::post('/chat-room/send', [ChatController::class, 'store']);
+Route::delete('/chat-room/message/{message}', [ChatController::class, 'destroy']);
 
 // hapus room
 Route::post('/keluar-kelas', [KasController::class, 'keluarKelas']);

@@ -18,6 +18,11 @@ class ChatRoom extends Model
         return $this->hasMany(ChatMessage::class, 'room_id');
     }
 
+    public function reads()
+    {
+        return $this->hasMany(ChatRoomRead::class, 'room_id');
+    }
+
     public function cleanupExpiredMessages(): void
     {
         $this->messages()

@@ -2,31 +2,29 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
-class ChatMessage extends Model
+class ChatRoomRead extends Model
 {
-    use SoftDeletes;
-
-    protected $table = 'chat_messages';
+    protected $table = 'chat_room_reads';
 
     protected $fillable = [
         'room_id',
         'user_id',
-        'message',
+        'last_read_at',
     ];
 
     protected $casts = [
-        'deleted_at' => 'datetime',
+        'last_read_at' => 'datetime',
     ];
 
-    public function room()
+    public function room(): BelongsTo
     {
         return $this->belongsTo(ChatRoom::class, 'room_id');
     }
 
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }

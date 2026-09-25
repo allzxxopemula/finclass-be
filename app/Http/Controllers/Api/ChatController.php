@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ChatRoom;
 use App\Models\ChatMessage;
+use App\Models\ChatRoomRead;
 use App\Models\Kelas;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -16,6 +17,23 @@ class ChatController extends Controller
         $kelas = Kelas::find($kelasId);
 
         return $kelas?->nama_kelas ?? ($kelas?->name ?? 'Room Kelas ' . $kelasId);
+    }
+
+    protected function unreadCountForUser(ChatRoom $room, int $userId): int
+    {
+        $lastRead = ChatRoomRead::where('room_id', $room->id)
+            ->where('user_id', $userId)
+            ->value('last_read_at');
+
+        $query = $room->messages()
+            ->whereNull('deleted_at')
+            ->where('user_id', '!=', $userId);
+
+        if ($lastRead) {
+            $query->where('created_at', '>', $lastRead);
+        }
+
+        return (int) $query->count();
     }
 
     public function index(Request $request)
@@ -47,6 +65,13 @@ class ChatController extends Controller
 
         $room->cleanupExpiredMessages();
 
+        $unreadCount = $this->unreadCountForUser($room, $user->id);
+
+        ChatRoomRead::updateOrCreate(
+            ['room_id' => $room->id, 'user_id' => $user->id],
+            ['last_read_at' => now()]
+        );
+
         $messages = $room->messages()
             ->with('user:id,name,email,username,profile_image_url')
             ->orderBy('created_at', 'asc')
@@ -54,7 +79,9 @@ class ChatController extends Controller
             ->map(function ($message) {
                 return [
                     'id' => $message->id,
-                    'message' => $message->message,
+                    'message' => $message->deleted_at ? 'Pesan ini telah dihapus' : $message->message,
+                    'deleted_at' => $message->deleted_at ? $message->deleted_at->toIso8601String() : null,
+                    'is_deleted' => (bool) $message->deleted_at,
                     'created_at' => $message->created_at->toIso8601String(),
                     'user' => [
                         'id' => $message->user?->id,
@@ -74,6 +101,46 @@ class ChatController extends Controller
                 'name' => $room->name,
             ],
             'messages' => $messages,
+            'unread_count' => $unreadCount,
+        ]);
+    }
+
+    public function markAsRead(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'room_id' => 'nullable|exists:chat_rooms,id',
+        ]);
+
+        $user = User::findOrFail($request->user_id);
+
+        $room = null;
+        if ($request->room_id) {
+            $room = ChatRoom::findOrFail($request->room_id);
+        } elseif ($user->kelas_id) {
+            $room = ChatRoom::firstOrCreate([
+                'kelas_id' => $user->kelas_id,
+            ], [
+                'name' => $this->resolveRoomName($user->kelas_id),
+            ]);
+        }
+
+        if (!$room) {
+            return response()->json([
+                'status' => 'success',
+                'unread_count' => 0,
+            ]);
+        }
+
+        $read = ChatRoomRead::updateOrCreate(
+            ['room_id' => $room->id, 'user_id' => $user->id],
+            ['last_read_at' => now()]
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'last_read_at' => $read->last_read_at?->toIso8601String(),
+            'unread_count' => 0,
         ]);
     }
 
@@ -140,6 +207,35 @@ class ChatController extends Controller
                     'username' => $user->username,
                     'profile_image_url' => $user->profile_image_url,
                 ],
+            ],
+        ]);
+    }
+
+    public function destroy(Request $request, ChatMessage $message)
+    {
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+        ]);
+
+        if ((int) $message->user_id !== (int) $request->user_id) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Kamu hanya bisa menghapus pesan milikmu sendiri.',
+            ], 403);
+        }
+
+        $message->message = 'Pesan ini telah dihapus';
+        $message->deleted_at = now();
+        $message->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Pesan dihapus.',
+            'chat' => [
+                'id' => $message->id,
+                'message' => $message->message,
+                'deleted_at' => $message->deleted_at->toIso8601String(),
+                'is_deleted' => true,
             ],
         ]);
     }
