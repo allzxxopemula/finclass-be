@@ -9,6 +9,7 @@ use App\Models\ChatRoomRead;
 use App\Models\Kelas;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class ChatController extends Controller
 {
@@ -19,15 +20,22 @@ class ChatController extends Controller
         return $kelas?->nama_kelas ?? ($kelas?->name ?? 'Room Kelas ' . $kelasId);
     }
 
+    protected function hasDeletedAtColumn(): bool
+    {
+        return Schema::hasColumn('chat_messages', 'deleted_at');
+    }
+
     protected function unreadCountForUser(ChatRoom $room, int $userId): int
     {
         $lastRead = ChatRoomRead::where('room_id', $room->id)
             ->where('user_id', $userId)
             ->value('last_read_at');
 
-        $query = $room->messages()
-            ->whereNull('deleted_at')
-            ->where('user_id', '!=', $userId);
+        $query = $room->messages()->where('user_id', '!=', $userId);
+
+        if ($this->hasDeletedAtColumn()) {
+            $query->whereNull('deleted_at');
+        }
 
         if ($lastRead) {
             $query->where('created_at', '>', $lastRead);
@@ -72,16 +80,20 @@ class ChatController extends Controller
             ['last_read_at' => now()]
         );
 
-        $messages = $room->messages()
+        $messagesQuery = $room->messages()
             ->with('user:id,name,email,username,profile_image_url')
-            ->orderBy('created_at', 'asc')
-            ->get()
+            ->orderBy('created_at', 'asc');
+
+        $messages = $messagesQuery->get()
             ->map(function ($message) {
+                $deletedAt = $this->hasDeletedAtColumn() ? $message->deleted_at : null;
+                $isDeleted = (bool) $deletedAt;
+
                 return [
                     'id' => $message->id,
-                    'message' => $message->deleted_at ? 'Pesan ini telah dihapus' : $message->message,
-                    'deleted_at' => $message->deleted_at ? $message->deleted_at->toIso8601String() : null,
-                    'is_deleted' => (bool) $message->deleted_at,
+                    'message' => $isDeleted || str_contains((string) $message->message, 'Pesan ini telah dihapus') ? 'Pesan ini telah dihapus' : $message->message,
+                    'deleted_at' => $deletedAt ? $deletedAt->toIso8601String() : null,
+                    'is_deleted' => $isDeleted || str_contains((string) $message->message, 'Pesan ini telah dihapus'),
                     'created_at' => $message->created_at->toIso8601String(),
                     'user' => [
                         'id' => $message->user?->id,
@@ -225,7 +237,11 @@ class ChatController extends Controller
         }
 
         $message->message = 'Pesan ini telah dihapus';
-        $message->deleted_at = now();
+
+        if ($this->hasDeletedAtColumn()) {
+            $message->deleted_at = now();
+        }
+
         $message->save();
 
         return response()->json([
@@ -234,7 +250,7 @@ class ChatController extends Controller
             'chat' => [
                 'id' => $message->id,
                 'message' => $message->message,
-                'deleted_at' => $message->deleted_at->toIso8601String(),
+                'deleted_at' => $this->hasDeletedAtColumn() && $message->deleted_at ? $message->deleted_at->toIso8601String() : null,
                 'is_deleted' => true,
             ],
         ]);

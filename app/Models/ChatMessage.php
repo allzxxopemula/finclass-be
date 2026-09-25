@@ -3,18 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ChatMessage extends Model
 {
-    use SoftDeletes;
-
     protected $table = 'chat_messages';
 
     protected $fillable = [
         'room_id',
         'user_id',
         'message',
+        'deleted_at',
     ];
 
     protected $casts = [
