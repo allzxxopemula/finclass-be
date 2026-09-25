@@ -75,11 +75,6 @@ class ChatController extends Controller
 
         $unreadCount = $this->unreadCountForUser($room, $user->id);
 
-        ChatRoomRead::updateOrCreate(
-            ['room_id' => $room->id, 'user_id' => $user->id],
-            ['last_read_at' => now()]
-        );
-
         $messagesQuery = $room->messages()
             ->with('user:id,name,email,username,profile_image_url')
             ->orderBy('created_at', 'asc');
