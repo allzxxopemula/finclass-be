@@ -78,6 +78,7 @@ class DashboardController extends Controller
                     'role' => $member->role,
                     'kelas_id' => $member->kelas_id,
                     'profile_image_url' => $member->profile_image_url,
+                    'created_at' => $member->created_at?->toISOString(),
                 ];
             });
 
@@ -92,6 +93,7 @@ class DashboardController extends Controller
                 'role' => $bendahara->role,
                 'kelas_id' => $bendahara->kelas_id,
                 'profile_image_url' => $bendahara->profile_image_url,
+                'created_at' => $bendahara->created_at?->toISOString(),
             ] : null,
             'members' => $members,
             'siswas' => $siswas,
