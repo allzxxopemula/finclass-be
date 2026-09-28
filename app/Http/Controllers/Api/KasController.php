@@ -133,6 +133,7 @@ class KasController extends Controller
             'name' => 'required|string|max:255',
             'username' => 'nullable|string|max:40',
             'profile_image_url' => 'nullable|string|url|max:2048',
+            'banner' => 'nullable|string|url|max:2048',
         ]);
 
         $user = User::find($request->user_id);
@@ -142,15 +143,19 @@ class KasController extends Controller
             $user->username = trim($request->username);
         }
 
-        if ($request->filled('profile_image_url')) {
-            $user->profile_image_url = $request->profile_image_url;
+        if ($request->exists('profile_image_url')) {
+            $user->profile_image_url = $request->profile_image_url === '' ? null : $request->profile_image_url;
+        }
+
+        if ($request->exists('banner')) {
+            $user->banner = $request->banner === '' ? null : $request->banner;
         }
 
         $user->save();
 
         $logMessage = 'Mengubah profil ' . $user->name;
-        if ($request->filled('profile_image_url')) {
-            $logMessage .= ' dengan foto profil baru';
+        if ($request->filled('profile_image_url') || $request->filled('banner')) {
+            $logMessage .= ' dengan media profil baru';
         }
 
         AuditLog::record($request->user_id, $logMessage);
