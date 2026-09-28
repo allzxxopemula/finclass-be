@@ -79,6 +79,7 @@ class DashboardController extends Controller
                     'kelas_id' => $member->kelas_id,
                     'profile_image_url' => $member->profile_image_url,
                     'banner' => $member->banner,
+                    'custom_border_color' => $member->custom_border_color,
                     'created_at' => $member->created_at?->toISOString(),
                 ];
             });
@@ -95,6 +96,7 @@ class DashboardController extends Controller
                 'kelas_id' => $bendahara->kelas_id,
                 'profile_image_url' => $bendahara->profile_image_url,
                 'banner' => $bendahara->banner,
+                'custom_border_color' => $bendahara->custom_border_color,
                 'created_at' => $bendahara->created_at?->toISOString(),
             ] : null,
             'members' => $members,

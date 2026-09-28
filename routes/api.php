@@ -32,6 +32,7 @@ Route::post('/update-nominal', [KelasController::class, 'updateNominal']);
 
 // Profil & Proteksi
 Route::post('/update-profile', [KasController::class, 'updateProfile']);
+Route::post('/update-border-color', [KasController::class, 'updateBorderColor']);
 Route::post('/update-password', [KasController::class, 'updatePassword']);
 // Siswa CRUD
 Route::post('/tambah-siswa', [SiswaController::class, 'store']);

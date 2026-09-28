@@ -134,9 +134,19 @@ class KasController extends Controller
             'username' => 'nullable|string|max:40',
             'profile_image_url' => 'nullable|string|url|max:2048',
             'banner' => 'nullable|string|url|max:2048',
+            'custom_border_color' => ['nullable', 'string', 'max:20', 'regex:/^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/'],
         ]);
 
         $user = User::find($request->user_id);
+        $accountAge = $user->created_at ? now()->diffInDays($user->created_at) : 0;
+
+        if ($request->has('custom_border_color') && $request->custom_border_color !== null && $accountAge < 3) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Akun kamu harus berusia minimal 3 hari untuk membuka fitur kustom warna border!',
+            ], 422);
+        }
+
         $user->name = $request->name;
 
         if ($request->filled('username')) {
@@ -149,6 +159,10 @@ class KasController extends Controller
 
         if ($request->exists('banner')) {
             $user->banner = $request->banner === '' ? null : $request->banner;
+        }
+
+        if ($request->exists('custom_border_color')) {
+            $user->custom_border_color = $request->custom_border_color === '' ? null : $request->custom_border_color;
         }
 
         $user->save();
@@ -164,6 +178,33 @@ class KasController extends Controller
             'status' => 'success',
             'message' => 'Profil berhasil diperbarui!',
             'user' => $user
+        ]);
+    }
+
+    public function updateBorderColor(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'custom_border_color' => ['nullable', 'string', 'max:20', 'regex:/^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/'],
+        ]);
+
+        $user = User::findOrFail($request->user_id);
+        $accountAge = $user->created_at ? now()->diffInDays($user->created_at) : 0;
+
+        if ($request->custom_border_color !== null && $request->custom_border_color !== '' && $accountAge < 3) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Akun kamu harus berusia minimal 3 hari untuk membuka fitur kustom warna border!',
+            ], 422);
+        }
+
+        $user->custom_border_color = $request->custom_border_color === '' ? null : $request->custom_border_color;
+        $user->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Warna border berhasil diperbarui!',
+            'user' => $user,
         ]);
     }
 

@@ -21,6 +21,7 @@ class User extends Authenticatable
         'kelas_id',
         'profile_image_url',
         'banner',
+        'custom_border_color',
     ];
 
     protected $hidden = [
