@@ -126,6 +126,22 @@ class KasController extends Controller
         ]);
     }
 
+    protected function accountHasReachedMinimumAge(User $user): bool
+    {
+        if (!$user->created_at) {
+            return false;
+        }
+
+        try {
+            $createdAt = Carbon::parse($user->created_at)->startOfDay();
+            $today = now()->startOfDay();
+
+            return $createdAt->diffInDays($today, false) >= 3;
+        } catch (\Throwable $exception) {
+            return false;
+        }
+    }
+
     public function updateProfile(Request $request)
     {
         $request->validate([
@@ -138,9 +154,8 @@ class KasController extends Controller
         ]);
 
         $user = User::find($request->user_id);
-        $accountAge = $user->created_at ? now()->diffInDays($user->created_at) : 0;
 
-        if ($request->has('custom_border_color') && $request->custom_border_color !== null && $accountAge < 3) {
+        if ($request->has('custom_border_color') && $request->custom_border_color !== null && !$this->accountHasReachedMinimumAge($user)) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Akun kamu harus berusia minimal 3 hari untuk membuka fitur kustom warna border!',
@@ -189,9 +204,8 @@ class KasController extends Controller
         ]);
 
         $user = User::findOrFail($request->user_id);
-        $accountAge = $user->created_at ? now()->diffInDays($user->created_at) : 0;
 
-        if ($request->custom_border_color !== null && $request->custom_border_color !== '' && $accountAge < 3) {
+        if ($request->custom_border_color !== null && $request->custom_border_color !== '' && !$this->accountHasReachedMinimumAge($user)) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Akun kamu harus berusia minimal 3 hari untuk membuka fitur kustom warna border!',
