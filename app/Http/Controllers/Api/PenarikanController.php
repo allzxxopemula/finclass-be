@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Kelas;
 use App\Models\PenarikanKas;
 use App\Models\PenarikanKasDetail;
+use App\Models\HariLiburKas;
 use App\Models\Siswa;
 use App\Models\User;
 use App\Models\AuditLog;
@@ -137,6 +138,12 @@ class PenarikanController extends Controller
         $dates = $this->datesForMonth($kelas->hari_penarikan, $data['bulan'], $data['tahun']);
         $monthStart = Carbon::create($data['tahun'], $data['bulan'], 1)->startOfMonth();
         $monthEnd = $monthStart->copy()->endOfMonth();
+        $holidayDates = HariLiburKas::where('kelas_id', $kelas->id)
+            ->whereBetween('tanggal', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->get()
+            ->mapWithKeys(fn ($holiday) => [
+                $holiday->tanggal->format('Y-m-d') => ['catatan' => $holiday->catatan],
+            ]);
 
         $validDateStrings = collect($dates)->map(fn($d) => $d->toDateString())->toArray();
 
@@ -165,9 +172,18 @@ class PenarikanController extends Controller
 
         $siswa = Siswa::where('kelas_id', $kelas->id)->orderBy('id')->get();
 
-        $previousDetails = PenarikanKasDetail::whereHas('penarikanKas', function ($query) use ($kelas) {
+        $allHolidayDates = HariLiburKas::where('kelas_id', $kelas->id)
+            ->whereDate('tanggal', '<=', now()->toDateString())
+            ->pluck('tanggal')
+            ->map(fn ($date) => Carbon::parse($date)->toDateString())
+            ->all();
+
+        $previousDetails = PenarikanKasDetail::whereHas('penarikanKas', function ($query) use ($kelas, $allHolidayDates) {
             $query->where('kelas_id', $kelas->id)
                 ->whereDate('tanggal_penarikan', '<=', now()->toDateString());
+            if ($allHolidayDates) {
+                $query->whereNotIn('tanggal_penarikan', $allHolidayDates);
+            }
         })->get()->groupBy('siswa_id');
 
         $students = $siswa->map(function ($student) use ($previousDetails, $sessions, $kelas, $activeDate) {
@@ -192,10 +208,43 @@ class PenarikanController extends Controller
             'status' => 'success',
             'kelas' => $kelas,
             'tanggal_kolom' => $dateValues->take(15)->values(),
+            'hari_libur' => $holidayDates,
             'tanggal_aktif' => $activeDate,
             'siswas' => $students,
             'sudah_dikonfirmasi' => false,
         ]);
+    }
+
+    public function toggleHariLibur(Request $request)
+    {
+        $data = $request->validate([
+            'kelas_id' => 'required|exists:kelas,id',
+            'user_id' => 'required|exists:users,id',
+            'tanggal' => 'required|date',
+            'libur' => 'required|boolean',
+            'catatan' => 'nullable|string|max:1000',
+        ]);
+
+        abort_unless(User::whereKey($data['user_id'])
+            ->where('kelas_id', $data['kelas_id'])
+            ->where('role', 'bendahara')
+            ->exists(), 403, 'Hanya bendahara kelas yang dapat mengatur hari libur kas.');
+
+        $tanggal = Carbon::parse($data['tanggal'])->toDateString();
+        if ($data['libur']) {
+            $holiday = HariLiburKas::updateOrCreate(
+                ['kelas_id' => $data['kelas_id'], 'tanggal' => $tanggal],
+                ['user_id' => $data['user_id'], 'catatan' => $data['catatan'] ?? null]
+            );
+            AuditLog::record($data['user_id'], 'Menandai '.$tanggal.' sebagai Hari Libur Kas');
+
+            return response()->json(['status' => 'success', 'data' => $holiday]);
+        }
+
+        HariLiburKas::where('kelas_id', $data['kelas_id'])->whereDate('tanggal', $tanggal)->delete();
+        AuditLog::record($data['user_id'], 'Membuka kembali penarikan kas pada '.$tanggal);
+
+        return response()->json(['status' => 'success', 'data' => null]);
     }
 
     // Menyimpan checklist seluruh siswa dalam satu transaksi database.
@@ -214,6 +263,9 @@ class PenarikanController extends Controller
 
         $kelas = Kelas::findOrFail($validated['kelas_id']);
         $tanggal = Carbon::parse($validated['tanggal_penarikan']);
+        abort_if(HariLiburKas::where('kelas_id', $kelas->id)
+            ->whereDate('tanggal', $tanggal->toDateString())
+            ->exists(), 422, 'Tanggal tersebut adalah Hari Libur Kas.');
         
         $session = DB::transaction(function () use ($validated, $kelas) {
             $tanggal = Carbon::parse($validated['tanggal_penarikan'])->startOfDay();
@@ -266,6 +318,8 @@ class PenarikanController extends Controller
         ]);
         
         abort_unless(User::whereKey($data['user_id'])->where('kelas_id', $data['kelas_id'])->where('role', 'bendahara')->exists(), 403, 'Hanya bendahara kelas yang dapat mengubah buku kas.');
+
+        abort_if(HariLiburKas::where('kelas_id', $data['kelas_id'])->whereDate('tanggal', $tanggal)->exists(), 422, 'Tanggal tersebut adalah Hari Libur Kas.');
 
         $result = DB::transaction(function () use ($data, $tanggal, $siswaId) {
             $kelas = Kelas::findOrFail($data['kelas_id']);

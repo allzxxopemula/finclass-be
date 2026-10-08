@@ -44,6 +44,7 @@ Route::get('/penarikan-log', [PenarikanController::class, 'index']);
 Route::post('/penarikan/buku', [PenarikanController::class, 'createBook']);
 Route::delete('/penarikan/buku/{tahun}/{bulan}', [PenarikanController::class, 'destroyBook']);
 Route::get('/penarikan-form', [PenarikanController::class, 'form']);
+Route::post('/penarikan/hari-libur', [PenarikanController::class, 'toggleHariLibur']);
 Route::post('/penarikan', [PenarikanController::class, 'store']);
 Route::patch('/penarikan/{tanggal}/siswa/{siswaId}', [PenarikanController::class, 'updateDetail']);
 Route::get('/riwayat', [KasController::class, 'getRiwayat']);
