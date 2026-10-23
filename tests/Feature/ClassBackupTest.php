@@ -118,6 +118,8 @@ it('restores a validated backup atomically without changing other classes or acc
             'user_id' => null,
             'nama_siswa' => 'Ayu',
             'nomor_wa' => '081234',
+            'created_at' => '2026-09-27T07:33:07.000000Z',
+            'updated_at' => '2026-09-27T07:33:07.000000Z',
         ]],
         'pembayaran_kas' => [[
             'id' => 9002,
@@ -127,21 +129,49 @@ it('restores a validated backup atomically without changing other classes or acc
             'tahun' => 2026,
             'jumlah_bayar' => 5000,
             'status' => 'lunas',
+            'tanggal_bayar' => '2026-10-23T07:33:07.000000Z',
+            'created_at' => '2026-10-23T07:33:07.000000Z',
+            'updated_at' => '2026-10-23T07:33:07.000000Z',
+        ], [
+            'id' => 9004,
+            'siswa_id' => 9001,
+            'minggu_ke' => 2,
+            'bulan' => 'Oktober',
+            'tahun' => 2026,
+            'jumlah_bayar' => 5000,
+            'status' => 'tunggakan',
+            'tanggal_bayar' => null,
         ]],
         'penarikan_kas' => [[
             'id' => 9003,
             'minggu_ke' => 1,
             'tanggal_penarikan' => '2026-10-23',
             'total_nominal' => 5000,
-            'dikonfirmasi_pada' => '2026-10-23 23:59:59',
+            'dikonfirmasi_pada' => '2026-10-23T23:59:59.000000Z',
+            'created_at' => '2026-10-23T07:33:07.000000Z',
+            'updated_at' => '2026-10-23T07:33:07.000000Z',
             'details' => [[
                 'siswa_id' => 9001,
                 'nominal' => 5000,
                 'sudah_bayar' => true,
+                'dibayar_pada' => null,
+                'created_at' => '2026-10-23T07:33:07.000000Z',
+                'updated_at' => '2026-10-23T07:33:07.000000Z',
             ]],
         ]],
-        'pengeluaran' => [['deskripsi' => 'Buku', 'nominal' => 1000, 'foto_nota' => null]],
-        'hari_libur_kas' => [['tanggal' => '2026-10-30', 'catatan' => 'Libur']],
+        'pengeluaran' => [[
+            'deskripsi' => 'Buku',
+            'nominal' => 1000,
+            'foto_nota' => null,
+            'created_at' => '2026-10-23T07:33:07.000000Z',
+            'updated_at' => '2026-10-23T07:33:07.000000Z',
+        ]],
+        'hari_libur_kas' => [[
+            'tanggal' => '2026-10-30',
+            'catatan' => 'Libur',
+            'created_at' => '2026-10-23T07:33:07.000000Z',
+            'updated_at' => '2026-10-23T07:33:07.000000Z',
+        ]],
     ];
 
     $response = $this->post('/api/backup/restore', [
@@ -155,8 +185,12 @@ it('restores a validated backup atomically without changing other classes or acc
     $response->assertOk()->assertJsonPath('status', 'success');
     $restoredStudent = Siswa::where('kelas_id', $kelas->id)->sole();
     expect($restoredStudent->nama_siswa)->toBe('Ayu')
-        ->and((float) PembayaranKas::where('kelas_id', $kelas->id)->sole()->jumlah_bayar)->toBe(5000.0)
+        ->and((float) PembayaranKas::where('kelas_id', $kelas->id)->where('minggu_ke', 1)->sole()->jumlah_bayar)->toBe(5000.0)
+        ->and(PembayaranKas::where('kelas_id', $kelas->id)->where('minggu_ke', 1)->sole()->created_at->format('Y-m-d H:i:s'))->toBe('2026-10-23 07:33:07')
+        ->and(PembayaranKas::where('kelas_id', $kelas->id)->where('minggu_ke', 2)->sole()->tanggal_bayar)->toBeNull()
         ->and(PenarikanKas::where('kelas_id', $kelas->id)->sole()->details()->sole()->siswa_id)->toBe($restoredStudent->id)
+        ->and(PenarikanKas::where('kelas_id', $kelas->id)->sole()->details()->sole()->dibayar_pada)->toBeNull()
+        ->and(PenarikanKas::where('kelas_id', $kelas->id)->sole()->details()->sole()->created_at->format('Y-m-d H:i:s'))->toBe('2026-10-23 07:33:07')
         ->and(Pengeluaran::where('kelas_id', $kelas->id)->sole()->deskripsi)->toBe('Buku')
         ->and(HariLiburKas::where('kelas_id', $kelas->id)->sole()->user_id)->toBe($user->id)
         ->and($kelas->fresh()->nama_kelas)->toBe('XI RPL Pulih')

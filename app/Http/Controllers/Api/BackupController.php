@@ -13,6 +13,7 @@ use App\Models\Pengeluaran;
 use App\Models\Siswa;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -283,8 +284,8 @@ class BackupController extends Controller
                     'user_id' => $linkedUserId,
                     'nama_siswa' => $student['nama_siswa'],
                     'nomor_wa' => $student['nomor_wa'] ?? null,
-                    'created_at' => $student['created_at'] ?? now(),
-                    'updated_at' => $student['updated_at'] ?? now(),
+                    'created_at' => $this->databaseDateTime($student['created_at'] ?? null),
+                    'updated_at' => $this->databaseDateTime($student['updated_at'] ?? null),
                 ]);
             }
 
@@ -297,9 +298,9 @@ class BackupController extends Controller
                     'tahun' => $payment['tahun'],
                     'jumlah_bayar' => $payment['jumlah_bayar'],
                     'status' => $payment['status'],
-                    'tanggal_bayar' => $payment['tanggal_bayar'] ?? null,
-                    'created_at' => $payment['created_at'] ?? now(),
-                    'updated_at' => $payment['updated_at'] ?? now(),
+                    'tanggal_bayar' => $this->nullableDatabaseDateTime($payment['tanggal_bayar'] ?? null),
+                    'created_at' => $this->databaseDateTime($payment['created_at'] ?? null),
+                    'updated_at' => $this->databaseDateTime($payment['updated_at'] ?? null),
                 ]);
             }
 
@@ -309,9 +310,9 @@ class BackupController extends Controller
                     'minggu_ke' => $withdrawal['minggu_ke'],
                     'tanggal_penarikan' => $withdrawal['tanggal_penarikan'] ?? null,
                     'total_nominal' => $withdrawal['total_nominal'],
-                    'dikonfirmasi_pada' => $withdrawal['dikonfirmasi_pada'],
-                    'created_at' => $withdrawal['created_at'] ?? now(),
-                    'updated_at' => $withdrawal['updated_at'] ?? now(),
+                    'dikonfirmasi_pada' => $this->databaseDateTime($withdrawal['dikonfirmasi_pada']),
+                    'created_at' => $this->databaseDateTime($withdrawal['created_at'] ?? null),
+                    'updated_at' => $this->databaseDateTime($withdrawal['updated_at'] ?? null),
                 ]);
 
                 foreach ($withdrawal['details'] as $detail) {
@@ -320,9 +321,9 @@ class BackupController extends Controller
                         'siswa_id' => $studentIdMap[$detail['siswa_id']],
                         'nominal' => $detail['nominal'],
                         'sudah_bayar' => $detail['sudah_bayar'],
-                        'dibayar_pada' => $detail['dibayar_pada'] ?? null,
-                        'created_at' => $detail['created_at'] ?? now(),
-                        'updated_at' => $detail['updated_at'] ?? now(),
+                        'dibayar_pada' => $this->nullableDatabaseDateTime($detail['dibayar_pada'] ?? null),
+                        'created_at' => $this->databaseDateTime($detail['created_at'] ?? null),
+                        'updated_at' => $this->databaseDateTime($detail['updated_at'] ?? null),
                     ]);
                 }
             }
@@ -333,8 +334,8 @@ class BackupController extends Controller
                     'deskripsi' => $expense['deskripsi'],
                     'nominal' => $expense['nominal'],
                     'foto_nota' => $expense['foto_nota'] ?? null,
-                    'created_at' => $expense['created_at'] ?? now(),
-                    'updated_at' => $expense['updated_at'] ?? now(),
+                    'created_at' => $this->databaseDateTime($expense['created_at'] ?? null),
+                    'updated_at' => $this->databaseDateTime($expense['updated_at'] ?? null),
                 ]);
             }
 
@@ -344,8 +345,8 @@ class BackupController extends Controller
                     'user_id' => $requestData['user_id'],
                     'tanggal' => $holiday['tanggal'],
                     'catatan' => $holiday['catatan'] ?? null,
-                    'created_at' => $holiday['created_at'] ?? now(),
-                    'updated_at' => $holiday['updated_at'] ?? now(),
+                    'created_at' => $this->databaseDateTime($holiday['created_at'] ?? null),
+                    'updated_at' => $this->databaseDateTime($holiday['updated_at'] ?? null),
                 ]);
             }
 
@@ -492,5 +493,19 @@ class BackupController extends Controller
             403,
             'Hanya bendahara kelas yang dapat mengelola backup.'
         );
+    }
+
+    private function databaseDateTime(?string $value): string
+    {
+        return $value === null
+            ? now()->format('Y-m-d H:i:s')
+            : Carbon::parse($value)->format('Y-m-d H:i:s');
+    }
+
+    private function nullableDatabaseDateTime(?string $value): ?string
+    {
+        return $value === null
+            ? null
+            : Carbon::parse($value)->format('Y-m-d H:i:s');
     }
 }
