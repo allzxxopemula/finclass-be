@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\Api\AuditController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\BackupController;
 use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\KasController;
@@ -63,9 +62,3 @@ Route::post('/keluar-kelas', [KasController::class, 'keluarKelas']);
 Route::post('/hapus-kelas', [KasController::class, 'hapusKelas']);
 
 Route::post('/tambah-saldo-awal', [KasController::class, 'tambahSaldoAwal']);
-
-// Backup kelas hanya tersedia untuk bendahara yang mengelola kelas tersebut.
-Route::middleware('throttle:10,1')->group(function () {
-    Route::get('/backup/export', [BackupController::class, 'export']);
-    Route::post('/backup/restore', [BackupController::class, 'restore']);
-});
