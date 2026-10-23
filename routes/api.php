@@ -1,14 +1,15 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\AuditController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BackupController;
+use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\KasController;
 use App\Http\Controllers\Api\KelasController;
 use App\Http\Controllers\Api\PenarikanController;
 use App\Http\Controllers\Api\SiswaController;
-use App\Http\Controllers\Api\AuditController;
-use App\Http\Controllers\Api\ChatController;
+use Illuminate\Support\Facades\Route;
 
 // Endpoint autentikasi berdiri sendiri agar tidak bercampur dengan transaksi kas.
 // Rate limiting per IP untuk mencegah spam login/register dan brute-force attack.
@@ -62,3 +63,9 @@ Route::post('/keluar-kelas', [KasController::class, 'keluarKelas']);
 Route::post('/hapus-kelas', [KasController::class, 'hapusKelas']);
 
 Route::post('/tambah-saldo-awal', [KasController::class, 'tambahSaldoAwal']);
+
+// Backup kelas hanya tersedia untuk bendahara yang mengelola kelas tersebut.
+Route::middleware('throttle:10,1')->group(function () {
+    Route::get('/backup/export', [BackupController::class, 'export']);
+    Route::post('/backup/restore', [BackupController::class, 'restore']);
+});
